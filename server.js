@@ -5,12 +5,16 @@ const express = require('express');
 require('dotenv').config();
 
 const cors = require('cors');
+const pg = require('pg');
 const superagent = require('superagent');
 
 const server = express();
 server.use(cors());
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3030;
+const client = new pg.Client(process.env.DATABASE_URL);
+//const client = new pg.Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+
 
 server.get('/', (req, res) => {
     res.send('home route');
@@ -18,7 +22,7 @@ server.get('/', (req, res) => {
 
 
 //Route Definitions
-server.get('/location', locationHandler);
+//server.get('/location', locationHandler);
 server.get('/weather', weatherHandler);
 server.get('/parks', parksHandler);
 
@@ -30,25 +34,63 @@ function locationHandler(request, response) {
             response.status(200).json(locationData);
         })
 }
-function getLocation(city) {
-    let key = process.env.LOCATIONKEY;
-    let url = `https://eu1.locationiq.com/v1/search.php?key=${key}&q=${city}&format=json`;
-    return superagent.get(url)
-        .then(locData => {
-            const locationData = new Location(city, locData.body[0]);
-            return locationData;
-        })
-        .catch(() => {
-            errorHandler('Error in getting data from locationiq', req, res)
-        })
-}
+// function getLocation(city) {
+//     let key = process.env.LOCATIONKEY;
+//     let url = `https://eu1.locationiq.com/v1/search.php?key=${key}&q=${city}&format=json`;
+//     return superagent.get(url)
+//         .then(locData => {
+//             const locationData = new Location(city, locData.body[0]);
+//             return locationData;
+//         })
+//         .catch(() => {
+//             errorHandler('Error in getting data from locationiq', req, res)
+//         })
+// }
 
+/// localhost:3000/addMember?first=lina&last=mashayekh
+server.get('/location', (req, res) => {
+    //console.log(req.query);
 
+    let searchQuery = req.query.data;
+    console.log(searchQuery);
+    const URL = `https://maps.googleapis.com/maps/api/geocode/json?address=${searchQuery}&key=${process.env.GEOCODE_API_KEY}`;
+
+    superagent.get(URL)
+        .then(superagentResults => {
+            let locationData = superagentResults.body.results[0];
+            const location = new Location(searchQuery, locationData);
+            latitude = location.latitude;
+            longitude = location.longitude;
+            response.status(200).send(location);
+        })
+        .catch(error => {
+            handleError(error, res);
+        })
+    // let firstName = req.query.first;
+    // let lastName = req.query.last;
+    // let SQL = `INSERT INTO people VALUES ($1,$2) RETURNING *;`;
+    // let safeValues = [firstName, lastName];
+    // client.query(SQL, safeValues)
+    //     .then((result) => {
+    //         res.send(result.rows);
+    //         // res.send('data has been inserted!!');
+    //     })
+    //     .catch((error) => {
+    //         res.send('eeeeeeeeeeee', error.message)
+    //     })
+
+})
 function Location(city, geoData) {
-    this.search_query = city;
-    this.formatted_query = geoData.display_name;
-    this.latitude = geoData.lat;
-    this.longitude = geoData.lon;
+    // this.search_query = city;
+    // this.formatted_query = geoData.display_name;
+    // this.latitude = geoData.lat;
+    // this.longitude = geoData.lon;
+    //this.formatted_query = geoData.formatted_address;
+    this.formatted_query = city;
+    // this.latitude = geoData.geometry.location.lat;
+    // this.longitude = geoData.geometry.location.lng;
+    this.latitude = geoData.location.lat;
+    this.longitude = geoData.location.lon;
 
 }
 function weatherHandler(request, response) {
@@ -92,6 +134,7 @@ function Weather(geoData) {
 //Parks Here
 function parksHandler(request, response) {
     const parkCode = request.query.latitude + ',' + request.query.longitude;
+    // const parkCode = request.query.search_query;
     // console.log(request.query);
     // console.log(parkCode);
     getPark(parkCode)
@@ -136,9 +179,19 @@ server.use('*', (req, res) => {
 })
 
 function handleError(err, res) {
-    console.log(error);
+    console.log(err);
     if (res) res.status(500).send('Something Error');
 }
-server.listen(PORT, () => {
-    console.log(`Listening on PORT ${PORT}`);
-})
+// server.listen(PORT, () => {
+//     console.log(`Listening on PORT ${PORT}`);
+// })
+
+client.connect()
+    .then(() => {
+        server.listen(PORT, () =>
+            console.log(`listening on ${PORT}`)
+        );
+    })
+    // .catch((error) => {
+    //     res.send('cccccccccccc', error.message)
+    // })
