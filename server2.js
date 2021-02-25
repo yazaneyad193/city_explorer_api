@@ -29,29 +29,27 @@ server.get('/yelp', yelpHandler);
 server.get('/parks', parksHandler);
 function locationHandler(req, res) {
     let city = req.query.city;
-    getLocation(req, res, city)
-        .then(locationData => {
-            res.status(200).json(locationData);
+    CheckDB(city)
+        .then((result) => {
+            //console.log(result);
+            if (result.rowCount > 0) {
+                //
+                res.json(result.rows[0]);
+            } else {
+                callLocationAPI(req, res, city).then((data) => {
+                    res.json(data);
+                })
+            }
         })
 }
-
-function getLocation(req, res, city) {
-
+function CheckDB(city) {
     let save = [city];
     let SQL = `SELECT * FROM locations WHERE search_query=$1;`;
     return client.query(SQL, save)
-        .then((result) => {
-            if (result.rowCount !== 0) {
-                //console.log(result.rows[0]);
-                res.status(200).json(result.rows[0]);
-            } else {
-                callLocationAPI(req, res, city)
-                    .then(locData => {
-                        // console.log(locData);
-                        res.status(200).json(locData);
-                    });
-                // console.log('no data ');
-            }
+        .then((resultFromDB) => {
+            // console.log(resultFromDB);
+            return resultFromDB;
+
         })
 }
 
@@ -62,14 +60,18 @@ function callLocationAPI(req, res, city) {
         .then(data => {
             // console.log('inside callback function');
             const locationObject = new Location(city, data.body);
+            res.json(locationObject);
+
             let insertSQL = `INSERT INTO locations (search_query,formatted_query, latitude, longitude) VALUES ($1,$2,$3,$4) RETURNING *;`;
             let safeValues = [locationObject.search_query, locationObject.formatted_query, locationObject.latitude, locationObject.longitude];
             return client.query(insertSQL, safeValues)
-                .then(() => {
-                    //return datfromdba;
+                .then((dataFromDba) => {
+                    console.log(dataFromDba.rows);
+                    return dataFromDba.rows;
+                    //res.json(dataFromDba.rows);
                     // console.log('your data has been added successfully!!');
                 });
-            return locationObject;
+            // return locationObject;
         });
 }
 
@@ -132,7 +134,7 @@ function yelpHandler(req, res) {
     return superagent.get(url)
         .set('Authorization', `Bearer ${yelpKey}`)
         .then(yelpData => {
-            console.log('sssssssssss' + yelpData);
+            //console.log('sssssssssss' + yelpData);
             let yelpObjects = yelpData.body.businesses.map(y => {
                 let yelp = new Yelp(y);
                 return yelp;
